@@ -216,7 +216,7 @@ if len(st.session_state['chat_history']):
         # sources and context
         st.markdown(f'\n\nSources: {st.session_state["source_documents"][i]}')
         with st.expander("Información en la que se basa la respuesta"):
-            st.markdown(st.session_state['context'][i].replace('$', '\$'))
+            st.markdown(st.session_state['context'][i][0].replace('$', '\$'))
         
         # menu del feedback
         if st.session_state['feedback'] and st.session_state['feedback_q'] == i:

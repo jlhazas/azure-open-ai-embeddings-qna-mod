@@ -27,12 +27,9 @@ from utilities.azureblobstorage import AzureBlobStorageClient
 from utilities.translator import AzureTranslatorClient
 from utilities.customprompt import PROMPT
 from utilities.redis import RedisExtended
-<<<<<<< HEAD
 from utilities.azuresql import AzureSQLDatabase
-=======
 from utilities.azuresearch import AzureSearch
 
->>>>>>> 766f1ec43e0aea868c5b7dd0d696a3b2b7d950be
 import pandas as pd
 import json
 import urllib
@@ -73,12 +70,8 @@ class LLMHelper:
         self.deployment_type: str = os.getenv("OPENAI_DEPLOYMENT_TYPE", "Text")
         self.temperature: float = float(os.getenv("OPENAI_TEMPERATURE", 0.7)) if temperature is None else temperature
         self.max_tokens: int = int(os.getenv("OPENAI_MAX_TOKENS", -1)) if max_tokens is None else max_tokens
-<<<<<<< HEAD
         self.prompt = PROMPT if custom_prompt == '' else PromptTemplate(template=custom_prompt, input_variables=["summaries", "question", "language"])
-=======
-        self.prompt = PROMPT if custom_prompt == '' else PromptTemplate(template=custom_prompt, input_variables=["summaries", "question"])
         self.vector_store_type = os.getenv("VECTOR_STORE_TYPE")
->>>>>>> 766f1ec43e0aea868c5b7dd0d696a3b2b7d950be
 
         # Azure Search settings
         if  self.vector_store_type == "AzureSearch":
@@ -86,10 +79,6 @@ class LLMHelper:
             self.vector_store_password: str = os.getenv('AZURE_SEARCH_ADMIN_KEY')
 
         else:
-<<<<<<< HEAD
-            self.vector_store_full_address = f"{self.vector_store_protocol}{self.vector_store_address}:{self.vector_store_port}"
-        # comentar aqui
-=======
             # Vector store settings
             self.vector_store_address: str = os.getenv('REDIS_ADDRESS', "localhost")
             self.vector_store_port: int= int(os.getenv('REDIS_PORT', 6379))
@@ -101,7 +90,6 @@ class LLMHelper:
             else:
                 self.vector_store_full_address = f"{self.vector_store_protocol}{self.vector_store_address}:{self.vector_store_port}"
 
->>>>>>> 766f1ec43e0aea868c5b7dd0d696a3b2b7d950be
         self.chunk_size = int(os.getenv('CHUNK_SIZE', 500))
         self.chunk_overlap = int(os.getenv('CHUNK_OVERLAP', 100))
         self.document_loaders: BaseLoader = WebBaseLoader if document_loaders is None else document_loaders
@@ -111,14 +99,10 @@ class LLMHelper:
             self.llm: ChatOpenAI = ChatOpenAI(model_name=self.deployment_name, engine=self.deployment_name, temperature=self.temperature, max_tokens=self.max_tokens if self.max_tokens != -1 else None) if llm is None else llm
         else:
             self.llm: AzureOpenAI = AzureOpenAI(deployment_name=self.deployment_name, temperature=self.temperature, max_tokens=self.max_tokens) if llm is None else llm
-<<<<<<< HEAD
-        self.vector_store: RedisExtended = RedisExtended(redis_url=self.vector_store_full_address, index_name=self.index_name, embedding_function=self.embeddings.embed_query) if vector_store is None else vector_store
-=======
         if self.vector_store_type == "AzureSearch":
             self.vector_store: VectorStore = AzureSearch(azure_cognitive_search_name=self.vector_store_address, azure_cognitive_search_key=self.vector_store_password, index_name=self.index_name, embedding_function=self.embeddings.embed_query) if vector_store is None else vector_store
         else:
             self.vector_store: RedisExtended = RedisExtended(redis_url=self.vector_store_full_address, index_name=self.index_name, embedding_function=self.embeddings.embed_query) if vector_store is None else vector_store   
->>>>>>> 766f1ec43e0aea868c5b7dd0d696a3b2b7d950be
         self.k : int = 3 if k is None else k
 
         self.pdf_parser : AzureFormRecognizerClient = AzureFormRecognizerClient() if pdf_parser is None else pdf_parser

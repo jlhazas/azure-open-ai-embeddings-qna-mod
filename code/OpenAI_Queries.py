@@ -50,14 +50,12 @@ def check_deployment():
     #\ 4. Check if the Redis is working with previous version of data
     try:
         llm_helper = LLMHelper()
-<<<<<<< HEAD
         if llm_helper.vector_store.check_existing_index("embeddings-index"):
             st.warning("""Seems like you're using a Redis with an old data structure.
             If you want to use the new data structure, you can start using the app and go to "Add Document" -> "Add documents in Batch" and click on "Convert all files and add embeddings" to reprocess your documents.
             To remove this working, please delete the index "embeddings-index" from your Redis.
             If you prefer to use the old data structure, please change your Web App container image to point to the docker image: fruocco/oai-embeddings:2023-03-27_25.
             """)
-=======
         if llm_helper.vector_store_type != "AzureSearch":
             if llm_helper.vector_store.check_existing_index("embeddings-index"):
                 st.warning("""Seems like you're using a Redis with an old data structure.  
@@ -67,7 +65,6 @@ def check_deployment():
                 """)
             else:
                 st.success("Redis is working!")
->>>>>>> 766f1ec43e0aea868c5b7dd0d696a3b2b7d950be
         else:
             try:
                 llm_helper.vector_store.index_exists()
