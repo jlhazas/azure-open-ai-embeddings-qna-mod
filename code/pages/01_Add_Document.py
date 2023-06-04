@@ -7,13 +7,14 @@ import traceback
 import chardet
 from utilities.helper import LLMHelper
 import uuid
-from redis.exceptions import ResponseError 
+from redis.exceptions import ResponseError
 from urllib import parse
-    
+
+
 def upload_text_and_embeddings():
     file_name = f"{uuid.uuid4()}.txt"
     source_url = llm_helper.blob_client.upload_file(st.session_state['doc_text'], file_name=file_name, content_type='text/plain; charset=utf-8')
-    llm_helper.add_embeddings_lc(source_url) 
+    llm_helper.add_embeddings_lc(source_url)
     st.success("Embeddings added successfully.")
 
 def remote_convert_files_and_add_embeddings(process_all=False):
@@ -30,7 +31,7 @@ def remote_convert_files_and_add_embeddings(process_all=False):
         st.error(traceback.format_exc())
 
 def delete_row():
-    st.session_state['data_to_drop'] 
+    st.session_state['data_to_drop']
     redisembeddings.delete_document(st.session_state['data_to_drop'])
 
 def add_urls():
@@ -65,7 +66,7 @@ try:
     with st.expander("Add a single document to the knowledge base", expanded=True):
         st.write("For heavy or long PDF, please use the 'Add documents in batch' option below.")
         st.checkbox("Translate document to English", key="translate")
-        uploaded_file = st.file_uploader("Upload a document to add it to the knowledge base", type=['pdf','jpeg','jpg','png', 'txt'])
+        uploaded_file = st.file_uploader("Upload a document to add it to the knowledge base", type=['pdf','jpeg','jpg','png', 'txt', 'docx'])
         if uploaded_file is not None:
             # To read file as bytes:
             bytes_data = uploaded_file.getvalue()
@@ -80,15 +81,15 @@ try:
                 else:
                     # Get OCR with Layout API and then add embeddigns
                     converted_filename = llm_helper.convert_file_and_add_embeddings(st.session_state['file_url'], st.session_state['filename'], st.session_state['translate'])
-                
+
                 llm_helper.blob_client.upsert_blob_metadata(uploaded_file.name, {'converted': 'true', 'embeddings_added': 'true', 'converted_filename': parse.quote(converted_filename)})
                 st.success(f"File {uploaded_file.name} embeddings added to the knowledge base.")
-            
+
             # pdf_display = f'<iframe src="{st.session_state["file_url"]}" width="700" height="1000" type="application/pdf"></iframe>'
 
     with st.expander("Add text to the knowledge base", expanded=False):
         col1, col2 = st.columns([3,1])
-        with col1: 
+        with col1:
             st.session_state['doc_text'] = st.text_area("Add a new text content and them click on 'Compute Embeddings'", height=600)
 
         with col2:
@@ -117,7 +118,7 @@ try:
 
     with st.expander("Add URLs to the knowledge base", expanded=True):
         col1, col2 = st.columns([3,1])
-        with col1: 
+        with col1:
             st.session_state['urls'] = st.text_area("Add a URLs and than click on 'Compute Embeddings'", placeholder="PLACE YOUR URLS HERE SEPARATED BY A NEW LINE", height=100)
 
         with col2:

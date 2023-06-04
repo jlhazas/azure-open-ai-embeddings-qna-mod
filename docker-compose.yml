@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   web:
-    image: fruocco/oai-embeddings
+    build: .
     ports:
       - "8080:80"
     env_file:
@@ -9,6 +9,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    volumes:
+      - /home/jessica/Documentos/Sabadell/POC_openAI/azure-open-ai-embeddings-qna-mod/code:/usr/local/src/myscripts
   api:
     image: redis/redis-stack-server:latest
     ports:
