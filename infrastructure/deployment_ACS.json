@@ -8,25 +8,25 @@
         "description": "provide a 2-13 character prefix for all resources."
       }
     },
-    "ContainerName": {
+    "AzureCognitiveSearch": {
       "type": "string",
-      "defaultValue": "redis",
+      "defaultValue": "[concat(parameters('ResourcePrefix'), '-search')]",
       "metadata": {
-        "description": "Name of the container"
+        "description": "Azure Cognitive Search Resource"
       }
     },
-    "DNSNameLabel": {
+    "AzureCognitiveSearchSku": {
       "type": "string",
-      "defaultValue": "[concat(parameters('ResourcePrefix'), '-redis')]",
+      "defaultValue": "standard",
+      "allowedValues": [
+        "free",
+        "basic",
+        "standard",
+        "standard2",
+        "standard3"
+      ],
       "metadata": {
-        "description": "DNS Name Label for the Public IP address"
-      }
-    },
-    "RedisPassword": {
-      "type": "securestring",
-      "defaultValue": "redis",
-      "metadata": {
-        "description": "Redis Password"
+        "description": "The SKU of the search service you want to create. E.g. free or standard"
       }
     },
     "HostingPlanName": {
@@ -85,6 +85,20 @@
         "description": "Name of Application Insights"
       }
     },
+    "FormRecognizerName": {
+      "type": "string",
+      "defaultValue": "[concat(parameters('ResourcePrefix'), '-formrecog')]",
+      "metadata": {
+        "description": "Azure Form Recognizer Name"
+      }
+    },
+    "TranslatorName": {
+      "type": "string",
+      "defaultValue": "[concat(parameters('ResourcePrefix'), '-translator')]",
+      "metadata": {
+        "description": "Azure Translator Name"
+      }
+    },
     "OpenAIName": {
       "type": "string",
       "metadata": {
@@ -93,7 +107,7 @@
     },
     "OpenAIKey": {
       "type": "securestring",
-      "defaultValue": "sk-",
+      "defaultValue": "",
       "metadata": {
         "description": "OpenAI API Key"
       }
@@ -126,64 +140,73 @@
         "description": "OpenAI Embeddings Engine for Queries"
       }
     },
-    "OpenAITemperature": {
-      "type": "string",
-      "defaultValue": "0.7",
-      "metadata": {
-        "description": "OpenAI Temperature"
-      }
-    },
-    "OpenAIMaxTokens": {
-      "type": "string",
-      "defaultValue": "-1",
-      "metadata": {
-        "description": "OpenAI Max Tokens"
-      }
-    },
-    "FormRecognizerEndpoint": {
-      "type": "string",
-      "metadata": {
-        "description": "Form Recognizer Endpoint"
-      }
-    },
-    "FormRecognizerKey": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Form Recognizer Key"
-      }
-    },
-    "TranslateEndpoint": {
-      "type": "string",
-      "metadata": {
-        "description": "Translator Endpoint"
-      }
-    },
-    "TranslateKey": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Translator Key"
-      }
-    },
-    "TranslateRegion": {
-      "type": "string",
-      "metadata": {
-        "description": "Translator Region"
-      }
-    },
     "newGuid": {
       "type": "string",
       "defaultValue": "[newGuid()]"
     }
   },
   "variables": {
-    "ContainerImageName": "redis/redis-stack-server:latest",
     "WebAppImageName": "DOCKER|fruocco/oai-embeddings",
     "BlobContainerName": "documents",
-    "FileShareName": "redisdata",
     "QueueName": "doc-processing",
     "ClientKey": "[concat(uniqueString(guid(resourceGroup().id, deployment().name)), parameters('newGuid'), 'Tg2%')]"
   },
   "resources": [
+    {
+      "apiVersion": "2015-08-19",
+      "name": "[parameters('AzureCognitiveSearch')]",
+      "type": "Microsoft.Search/searchServices",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "[parameters('AzureCognitiveSearchSku')]"
+      },
+      "properties": {
+        "replicaCount": 1,
+        "partitionCount": 1
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2022-12-01",
+      "name": "[parameters('FormRecognizerName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "S0"
+      },
+      "kind": "FormRecognizer",
+      "identity": {
+        "type": "None"
+      },
+      "properties": {
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "virtualNetworkRules": [],
+          "ipRules": []
+        },
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2022-12-01",
+      "name": "[parameters('TranslatorName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "S1"
+      },
+      "kind": "TextTranslation",
+      "identity": {
+        "type": "None"
+      },
+      "properties": {
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "virtualNetworkRules": [],
+          "ipRules": []
+        },
+        "publicNetworkAccess": "Enabled"
+      }
+    },
     {
       "apiVersion": "2020-06-01",
       "name": "[parameters('HostingPlanName')]",
@@ -232,27 +255,6 @@
       ],
       "properties": {
         "publicAccess": "None"
-      }
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
-      "apiVersion": "2021-08-01",
-      "name": "[concat(parameters('StorageAccountName'), '/default/', variables('FileShareName'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccountName'))]"
-      ],
-      "properties": {
-
-        "protocolSettings": {
-          "smb": {}
-        },
-        "cors": {
-          "corsRules": []
-        },
-        "shareDeleteRetentionPolicy": {
-          "enabled": true,
-          "days": 7
-        }
       }
     },
     {
@@ -362,14 +364,6 @@
               "value": "[parameters('OpenAIKey')]"
             },
             {
-              "name": "OPENAI_TEMPERATURE",
-              "value": "[parameters('OpenAITemperature')]"
-            },
-            {
-              "name": "OPENAI_MAX_TOKENS",
-              "value": "[parameters('OpenAIMaxTokens')]"
-            },
-            {
               "name": "BLOB_ACCOUNT_NAME",
               "value": "[parameters('StorageAccountName')]"
             },
@@ -383,31 +377,35 @@
             },
             {
               "name": "FORM_RECOGNIZER_ENDPOINT",
-              "value": "[parameters('FormRecognizerEndpoint')]"
+              "value": "[concat('https://',resourceGroup().location,'.api.cognitive.microsoft.com/')]"
             },
             {
               "name": "FORM_RECOGNIZER_KEY",
-              "value": "[parameters('FormRecognizerKey')]"
+              "value": "[listKeys(concat('Microsoft.CognitiveServices/accounts/', parameters('FormRecognizerName')), '2023-05-01').key1]"
             },
             {
-              "name": "REDIS_ADDRESS",
-              "value": "[concat(parameters('DNSNameLabel'),'.' , resourceGroup().location ,'.azurecontainer.io')]"
+              "name": "VECTOR_STORE_TYPE",
+              "value": "AzureSearch"
             },
             {
-              "name": "REDIS_PASSWORD",
-              "value": "[parameters('RedisPassword')]"
+              "name": "AZURE_SEARCH_SERVICE_NAME",
+              "value": "[concat('https://',parameters('AzureCognitiveSearch'),'.search.windows.net')]"
+            },
+            {
+              "name": "AZURE_SEARCH_ADMIN_KEY",
+              "value": "[listAdminKeys(concat('Microsoft.Search/searchServices/', parameters('AzureCognitiveSearch')), '2021-04-01-preview').primaryKey]"
             },
             {
               "name": "TRANSLATE_ENDPOINT",
-              "value": "[parameters('TranslateEndpoint')]"
+              "value": "https://api.cognitive.microsofttranslator.com/"
             },
             {
               "name": "TRANSLATE_KEY",
-              "value": "[parameters('TranslateKey')]"
+              "value": "[listKeys(concat('Microsoft.CognitiveServices/accounts/', parameters('TranslatorName')), '2023-05-01').key1]"
             },
             {
               "name": "TRANSLATE_REGION",
-              "value": "[parameters('TranslateRegion')]"
+              "value": "[resourceGroup().location]"
             },
             {
               "name": "QUEUE_NAME",
@@ -415,9 +413,7 @@
             }
           ],
           "cors": {
-            "allowedOrigins": [
-              "https://portal.azure.com"
-            ]
+            "allowedOrigins": [ "https://portal.azure.com" ]
           },
           "use32BitWorkerProcess": false,
           "linuxFxVersion": "DOCKER|fruocco/oai-batch:latest",
@@ -428,69 +424,6 @@
         "clientAffinityEnabled": false,
         "virtualNetworkSubnetId": null,
         "httpsOnly": true
-      }
-    },
-    {
-      "name": "[parameters('ContainerName')]",
-      "type": "Microsoft.ContainerInstance/containerGroups",
-      "apiVersion": "2021-10-01",
-      "location": "[resourceGroup().location]",
-      "properties": {
-        "containers": [
-          {
-            "name": "[parameters('ContainerName')]",
-            "properties": {
-              "image": "[variables('ContainerImageName')]",
-              "resources": {
-                "requests": {
-                  "cpu": 1,
-                  "memoryInGb": 1.5
-                }
-              },
-              "environmentVariables": [
-                {
-                  "name": "REDIS_ARGS",
-                  "value": "[concat('--requirepass ', parameters('RedisPassword'))]"
-                }
-              ],
-              "ports": [
-                {
-                  "protocol": "TCP",
-                  "port": 6379
-                }
-              ],
-              "volumeMounts": [
-                {
-                  "name": "[variables('FileShareName')]",
-                  "mountPath": "/data"
-                }
-              ]
-            }
-          }
-        ],
-        "osType": "Linux",
-        "ipAddress": {
-          "type": "Public",
-          "ports": [
-            {
-              "protocol": "TCP",
-              "port": 6379
-            }
-          ],
-          "dnsNameLabel": "[parameters('DNSNameLabel')]"
-        },
-        "initContainers": [
-        ],
-        "volumes": [
-          {
-            "name": "[variables('FileShareName')]",
-            "azureFile": {
-              "shareName": "[variables('FileShareName')]",
-              "storageAccountName": "[parameters('StorageAccountName')]",
-              "storageAccountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccountName')), '2021-08-01').keys[0].value]"
-            }
-          }
-        ]
       }
     },
     {
@@ -521,20 +454,19 @@
         "OPENAI_DEPLOYMENT_TYPE": "[parameters('OpenAIDeploymentType')]",
         "OPENAI_EMBEDDINGS_ENGINE_DOC": "[parameters('OpenAIEmbeddingsEngineDoc')]",
         "OPENAI_EMBEDDINGS_ENGINE_QUERY": "[parameters('OpenAIEmbeddingsEngineQuery')]",
-        "REDIS_ADDRESS": "[concat(parameters('DNSNameLabel'),'.' , resourceGroup().location ,'.azurecontainer.io')]",
-        "REDIS_PASSWORD": "[parameters('RedisPassword')]",
+        "VECTOR_STORE_TYPE": "AzureSearch",
+        "AZURE_SEARCH_SERVICE_NAME": "[concat('https://',parameters('AzureCognitiveSearch'),'.search.windows.net')]",
+        "AZURE_SEARCH_ADMIN_KEY": "[listAdminKeys(concat('Microsoft.Search/searchServices/', parameters('AzureCognitiveSearch')), '2021-04-01-preview').primaryKey]",
         "OPENAI_API_BASE": "[concat('https://', parameters('OpenAIName'),'.openai.azure.com/')]",
         "OPENAI_API_KEY": "[parameters('OpenAIKey')]",
-        "OPENAI_TEMPERATURE": "[parameters('OpenAITemperature')]",
-        "OPENAI_MAX_TOKENS": "[parameters('OpenAIMaxTokens')]",
         "BLOB_ACCOUNT_NAME": "[parameters('StorageAccountName')]",
         "BLOB_ACCOUNT_KEY": "[listkeys(resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccountName')), '2015-05-01-preview').key1]",
         "BLOB_CONTAINER_NAME": "[variables('BlobContainerName')]",
-        "FORM_RECOGNIZER_ENDPOINT": "[parameters('FormRecognizerEndpoint')]",
-        "FORM_RECOGNIZER_KEY": "[parameters('FormRecognizerKey')]",
-        "TRANSLATE_ENDPOINT": "[parameters('TranslateEndpoint')]",
-        "TRANSLATE_KEY": "[parameters('TranslateKey')]",
-        "TRANSLATE_REGION": "[parameters('TranslateRegion')]",
+        "FORM_RECOGNIZER_ENDPOINT": "[concat('https://',resourceGroup().location,'.api.cognitive.microsoft.com/')]",
+        "FORM_RECOGNIZER_KEY": "[listKeys(concat('Microsoft.CognitiveServices/accounts/', parameters('FormRecognizerName')), '2023-05-01').key1]",
+        "TRANSLATE_ENDPOINT": "https://api.cognitive.microsofttranslator.com/",
+        "TRANSLATE_KEY": "[listKeys(concat('Microsoft.CognitiveServices/accounts/', parameters('TranslatorName')), '2023-05-01').key1]",
+        "TRANSLATE_REGION": "[resourceGroup().location]",
         "CONVERT_ADD_EMBEDDINGS_URL": "[concat('https://', parameters('FunctionName') , '.azurewebsites.net/api/BatchStartProcessing?code=', variables('ClientKey'))]"
       }
     },

@@ -22,3 +22,5 @@ chardet==5.1.0
 docx2txt==0.8
 streamlit-modal==0.1.0
 pyodbc==4.0.39
+--extra-index-url https://pkgs.dev.azure.com/azure-sdk/public/_packaging/azure-sdk-for-python/pypi/simple/
+azure-search-documents==11.4.0a20230509004
