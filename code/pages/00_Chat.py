@@ -99,7 +99,6 @@ def send_feedback(q_and_a, sources):
         st.error("Hubo un error procesando tu feedback. Por favor, vuelve a intentarlo.")
     return
 
-
 def check_variables_in_prompt():
     # Check if "summaries" is present in the string custom_prompt
     if "{summaries}" not in st.session_state.custom_prompt:
@@ -196,12 +195,17 @@ with st.expander("Settings"):
 clear_chat = st.button("Clear chat", key="clear_chat", on_click=clear_chat_data)
 input_text = st.text_input("You: ", placeholder="type your question", value=st.session_state.chat_askedquestion, key="input"+str(st.session_state ['input_message_key']), on_change=questionAsked)
 language = st.radio("Idioma", ("Castellano", "Catalán"), key='language', horizontal=True)
+conversational_mode = st.checkbox(label="Modo conversación", value=False, key='conv_mode')
 
 # If a question is asked execute the request to get the result, context, sources and up to 3 follow-up questions proposals
 if st.session_state.chat_askedquestion:
     st.session_state['chat_question'] = st.session_state.chat_askedquestion
     st.session_state.chat_askedquestion = ""
-    st.session_state['chat_question'], result, context, sources = llm_helper.get_semantic_answer_lang_chain(st.session_state['chat_question'], st.session_state['chat_history'], st.session_state['language'])    
+    if st.session_state['conv_mode']:
+        chat_history = st.session_state['chat_history']
+    else:
+        chat_history = []
+    st.session_state['chat_question'], result, context, sources = llm_helper.get_semantic_answer_lang_chain(st.session_state['chat_question'], chat_history, st.session_state['language'])    
     result, chat_followup_questions_list = llm_helper.extract_followupquestions(result)
     st.session_state['chat_history'].append((st.session_state['chat_question'], result))
     st.session_state['chat_source_documents'].append(sources)
@@ -244,6 +248,10 @@ try:
                 st.button("👍", key="pos_feedback_" + str(i), on_click=feedback_ui, args=((i, 1)))
             with col3:
                 st.button("👎", key="neg_feedback_" + str(i), on_click=feedback_ui, args=((i, -1)))
+            
+            url = st.session_state["chat_source_documents"][i]
+            url_pdf = url.replace("converted/", "").replace(".txt", "")
+            st.session_state["chat_source_documents"][i] = url_pdf
             st.markdown(f'\n\nSources: {st.session_state["chat_source_documents"][i]}')
         
             # menu del feedback
