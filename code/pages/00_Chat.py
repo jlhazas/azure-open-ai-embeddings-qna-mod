@@ -3,9 +3,12 @@ from streamlit_chat import message
 from utilities.helper import LLMHelper
 import os
 import numpy as np
-from langchain.schema import HumanMessage, AIMessage
-from streamlit_modal import Modal
+#from langchain.schema import HumanMessage, AIMessage
 from time import time
+import regex as re
+import os
+from random import randint
+import traceback
 
 # Custom prompt variables
 custom_prompt_placeholder = """{summaries}
@@ -47,16 +50,25 @@ def convert_url(url):
 def show_modal():
     st.session_state['open_modal'] = True
 
-def clear_text_input():
-    st.session_state['question'] = st.session_state['input']
-    st.session_state['input'] = ""
 
 
 def clear_chat_data():
-    st.session_state['input'] = ""
     st.session_state['chat_history'] = []
-    # NOT SUPPORTED st.session_state['chat_history'].append(SystemMessage(content=st.session_state['system_message']))
-    st.session_state['source_documents'] = []
+    st.session_state['chat_source_documents'] = []
+    st.session_state['chat_askedquestion'] = ''
+    st.session_state['chat_question'] = ''
+    st.session_state['chat_followup_questions'] = []
+    answer_with_citations = ""
+
+def questionAsked():
+    st.session_state.chat_askedquestion = st.session_state["input"+str(st.session_state ['input_message_key'])]
+    st.session_state.chat_question = st.session_state.chat_askedquestion
+
+# Callback to assign the follow-up question is selected by the user
+def ask_followup_question(followup_question):
+    st.session_state.chat_askedquestion = followup_question
+    st.session_state['input_message_key'] = st.session_state['input_message_key'] + 1
+
 
 def check_variables_feedback():
     check = True
@@ -120,20 +132,25 @@ def placeholder_func():
 #    return
 
 # Initialize chat history
-if 'question' not in st.session_state:
-    st.session_state['question'] = None
+if 'chat_question' not in st.session_state:
+    st.session_state['chat_question'] = ''
+if 'chat_askedquestion' not in st.session_state:
+    st.session_state.chat_askedquestion = ''
 if 'system_message' not in st.session_state:
     st.session_state['system_message'] = default_system_message
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
-    #st.session_state['chat_history'].append((SystemMessage(content=st.session_state['system_message']), ""))
-if 'source_documents' not in st.session_state:
-    st.session_state['source_documents'] = []
+        #st.session_state['chat_history'].append((SystemMessage(content=st.session_state['system_message']), ""))
+if 'chat_source_documents' not in st.session_state:
+    st.session_state['chat_source_documents'] = []
+if 'chat_followup_questions' not in st.session_state:
+    st.session_state['chat_followup_questions'] = []
+if 'input_message_key' not in st.session_state:
+    st.session_state ['input_message_key'] = 1
 if 'context' not in st.session_state:
     st.session_state['context'] = []
 if 'open_modal' not in st.session_state:
     st.session_state['open_modal'] = False
-
 if 'response' not in st.session_state:
     st.session_state['response'] = default_answer
 if 'custom_prompt' not in st.session_state:
@@ -154,7 +171,14 @@ if 'answer_fb' not in st.session_state:
     st.session_state['answer_fb'] = None
 if 'custom_prompt' not in st.session_state:
     st.session_state['custom_prompt'] = ""
+
+# Initialize Chat Icons
+ai_avatar_style = os.getenv("CHAT_AI_AVATAR_STYLE", "thumbs")
+ai_seed = os.getenv("CHAT_AI_SEED", "Lucy")
+user_avatar_style = os.getenv("CHAT_USER_AVATAR_STYLE", "thumbs")
+user_seed = os.getenv("CHAT_USER_SEED", "Bubba")
 #print(st.session_state.custom_prompt)
+
 llm_helper = LLMHelper(custom_prompt=st.session_state['custom_prompt'], temperature=st.session_state.custom_temperature)
 #llm_helper = LLMHelper()
 
@@ -167,85 +191,72 @@ with st.expander("Settings"):
     st.slider("Temperature", min_value=0.0, max_value=1.0, step=0.1, key='custom_temperature')
     st.text_area("Custom Prompt", key='custom_prompt', on_change=check_variables_in_prompt, placeholder= custom_prompt_placeholder, help=custom_prompt_help, height=150)
 
-    # NOT SUPPORTED st.text_area("System Message", key='system_message', on_change=update_system_message, placeholder=default_system_message, height=150)
 
-# Chat
-st.text_input("Tú: ", placeholder="Escribe tu pregunta", key="input", on_change=clear_text_input)
-clear_chat = st.button("Borrar historial del chat", key="clear_chat", on_click=clear_chat_data)
-
-
+    # Chat 
+clear_chat = st.button("Clear chat", key="clear_chat", on_click=clear_chat_data)
+input_text = st.text_input("You: ", placeholder="type your question", value=st.session_state.chat_askedquestion, key="input"+str(st.session_state ['input_message_key']), on_change=questionAsked)
 language = st.radio("Idioma", ("Castellano", "Catalán"), key='language', horizontal=True)
-#prueba = st.button("Prueba", key="prueba button", on_click=clear_chat_data)
 
-if st.session_state['question']:
-    #question, result, context, sources = llm_helper.get_semantic_answer_lang_chain(st.session_state['question'], st.session_state['chat_history'], st.session_state['language'])
-    question, result, context, sources = llm_helper.get_semantic_answer_lang_chain(st.session_state['question'], [], st.session_state['language'])
+# If a question is asked execute the request to get the result, context, sources and up to 3 follow-up questions proposals
+if st.session_state.chat_askedquestion:
+    st.session_state['chat_question'] = st.session_state.chat_askedquestion
+    st.session_state.chat_askedquestion = ""
+    st.session_state['chat_question'], result, context, sources = llm_helper.get_semantic_answer_lang_chain(st.session_state['chat_question'], st.session_state['chat_history'], st.session_state['language'])    
+    result, chat_followup_questions_list = llm_helper.extract_followupquestions(result)
+    st.session_state['chat_history'].append((st.session_state['chat_question'], result))
+    st.session_state['chat_source_documents'].append(sources)
+    st.session_state['chat_followup_questions'] = chat_followup_questions_list
 
-    #question = st.session_state['question']
-    #result = "Hello, this is not ChatGPT, just a placeholder."
-    #sources = "https://pocopenaistr.blob.core.windows.net/documents/converted/manual.pdf.txt\nhttps://pocopenaistr.blob.core.windows.net/documents/converted/manual.pdf.txt"
-    #context = "Answer context"
-    #sources = list(map(convert_url, sources.split("\n")))
-    human_message = HumanMessage(content=question)
-    ai_message = AIMessage(content=result)
-    #print(human_message.type)
+try:    
+    # Displays the chat history
+    if st.session_state['chat_history']:
+        history_range = range(len(st.session_state['chat_history'])-1, -1, -1)
+        for i in range(len(st.session_state['chat_history'])-1, -1, -1):
 
-    #ai_message =
-    st.session_state['chat_history'].append((human_message, ai_message))
-    st.session_state['source_documents'].append(sources)
-    st.session_state['context'].append([context])
+            # This history entry is the latest one - also show follow-up questions, buttons to access source(s) context(s) 
+            if i == history_range.start:
+                answer_with_citations, sourceList, matchedSourcesList, linkList, filenameList = llm_helper.get_links_filenames(st.session_state['chat_history'][i][1], st.session_state['chat_source_documents'][i])
+                st.session_state['chat_history'][i] = st.session_state['chat_history'][i][:1] + (answer_with_citations,)
 
-    st.session_state['question'] = None
-    #print(st.session_state['chat_history'])
+                answer_with_citations = re.sub(r'\$\^\{(.*?)\}\$', r'(\1)', st.session_state['chat_history'][i][1]).strip() # message() does not get Latex nor html
 
-if len(st.session_state['chat_history']):
-    #print(st.session_state['chat_history'])
-    for i in range(len(st.session_state['chat_history'])-1, -1, -1):
-        q_and_a = st.session_state['chat_history'][i]
+                # Display proposed follow-up questions which can be clicked on to ask that question automatically
+                if len(st.session_state['chat_followup_questions']) > 0:
+                    st.markdown('**Proposed follow-up questions:**')
+                with st.container():
+                    for questionId, followup_question in enumerate(st.session_state['chat_followup_questions']):
+                        if followup_question:
+                            str_followup_question = re.sub(r"(^|[^\\\\])'", r"\1\\'", followup_question)
+                            st.button(str_followup_question, key=randint(1000,99999), on_click=ask_followup_question, args=(followup_question, ))
+                    
+                for questionId, followup_question in enumerate(st.session_state['chat_followup_questions']):
+                    if followup_question:
+                        str_followup_question = re.sub(r"(^|[^\\\\])'", r"\1\\'", followup_question)
+
+            answer_with_citations = re.sub(r'\$\^\{(.*?)\}\$', r'(\1)', st.session_state['chat_history'][i][1]) # message() does not get Latex nor html
+            
+            # feedback buttons
+            col1, col2, col3 = st.columns([0.75,0.125,0.125])
+            
+            with col1:
+                message(answer_with_citations ,key=str(i)+'answers')
+            with col2:
+                st.button("👍", key="pos_feedback_" + str(i), on_click=feedback_ui, args=((i, 1)))
+            with col3:
+                st.button("👎", key="neg_feedback_" + str(i), on_click=feedback_ui, args=((i, -1)))
+            st.markdown(f'\n\nSources: {st.session_state["chat_source_documents"][i]}')
         
-        # feedback buttons
-        col1, col2, col3 = st.columns([0.75,0.125,0.125])
-        
-        with col1:
-            message(q_and_a[1].content, key=str(i))
-        with col2:
-            st.button("👍", key="pos_feedback_" + str(i), on_click=feedback_ui, args=((i, 1)))
-        with col3:
-            st.button("👎", key="neg_feedback_" + str(i), on_click=feedback_ui, args=((i, -1)))
-        #print(st.session_state["source_documents"][i])
-        # sources and context
-        st.markdown(f'\n\nSources: {st.session_state["source_documents"][i]}')
-        with st.expander("Información en la que se basa la respuesta"):
-            st.markdown(st.session_state['context'][i][0].replace('$', '\$'))
-        
-        # menu del feedback
-        if st.session_state['feedback'] and st.session_state['feedback_q'] == i:
-            #print(st.session_state['feedback_q'])
-            with st.container():
-                st.write("**Feedback de la interacción**")
-                st.text_input("Usuario: ", key="username_fb", placeholder="Escribe un nombre para poder contactarte en caso de necesitar mas detalles")
-                st.text_area("Comentarios: ", key="comment_fb", max_chars=5000, placeholder="Escribe tus comentarios sobre la respuesta recibida", height=50)
-                if st.session_state['feedback'] == -1:
-                    st.text_area("Respuesta correcta: ", key="answer_fb", max_chars=5000, placeholder="Escribe cuál hubiese sido la respuesta adecuada o correcta", height=50)
-                st.button("Enviar", key="send_feedback", on_click=send_feedback, args=((q_and_a, st.session_state["source_documents"][i])))
-        message(q_and_a[0].content, is_user=True, key=str(i) + '_user')
-# modificacion para que no mantenga historial de mensajes
+            # menu del feedback
+            if st.session_state['feedback'] and st.session_state['feedback_q'] == i:
+                #print(st.session_state['feedback_q'])
+                with st.container():
+                    st.write("**Feedback de la interacción**")
+                    st.text_input("Usuario: ", key="username_fb", placeholder="Escribe un nombre para poder contactarte en caso de necesitar mas detalles")
+                    st.text_area("Comentarios: ", key="comment_fb", max_chars=5000, placeholder="Escribe tus comentarios sobre la respuesta recibida", height=50)
+                    if st.session_state['feedback'] == -1:
+                        st.text_area("Respuesta correcta: ", key="answer_fb", max_chars=5000, placeholder="Escribe cuál hubiese sido la respuesta adecuada o correcta", height=50)
+                    st.button("Enviar", key="send_feedback", on_click=send_feedback, args=((st.session_state['chat_history'][i], st.session_state["chat_source_documents"][i])))
+            message(st.session_state['chat_history'][i][0], is_user=True, key=str(i)+'user' + '_user')
 
-
-#if st.session_state['open_modal']:
-#modal.open()
-#if modal.is_open():
-#    with modal.container():
-#        st.write("Text goes here")
-#        html_string = '''
-#    <h1>HTML string in RED</h1>
-
-#    <script language="javascript">
-#      document.querySelector("h1").style.color = "red";
-#    </script>
-#    '''
-#        components.html(html_string)
-
-#        st.write("Some fancy text")
-#        value = st.checkbox("Check me")
-#        st.write(f"Checkbox checked: {value}")
+except Exception:
+    st.error(traceback.format_exc())
