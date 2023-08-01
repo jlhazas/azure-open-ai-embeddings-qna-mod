@@ -16,7 +16,8 @@ from langchain.chains.chat_vector_db.prompts import CONDENSE_QUESTION_PROMPT
 from langchain.prompts import PromptTemplate
 from langchain.document_loaders.base import BaseLoader
 from langchain.document_loaders import WebBaseLoader
-from langchain.text_splitter import TokenTextSplitter, TextSplitter
+from langchain.text_splitter import TokenTextSplitter,  CharacterTextSplitter, TextSplitter
+from utilities.CustomCharacterSplitter import CustomCharacterTextSplitter
 from langchain.document_loaders.base import BaseLoader
 from langchain.document_loaders import TextLoader
 from langchain.chat_models import ChatOpenAI
@@ -75,6 +76,7 @@ class LLMHelper:
 
         # Azure Search settings
         if  self.vector_store_type == "AzureSearch":
+            print("I'm on AzureSearch Mode")
             self.vector_store_address: str = os.getenv('AZURE_SEARCH_SERVICE_NAME')
             self.vector_store_password: str = os.getenv('AZURE_SEARCH_ADMIN_KEY')
 
@@ -93,7 +95,7 @@ class LLMHelper:
         self.chunk_size = int(os.getenv('CHUNK_SIZE', 500))
         self.chunk_overlap = int(os.getenv('CHUNK_OVERLAP', 100))
         self.document_loaders: BaseLoader = WebBaseLoader if document_loaders is None else document_loaders
-        self.text_splitter: TextSplitter = TokenTextSplitter(chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap) if text_splitter is None else text_splitter
+        self.text_splitter: TextSplitter = CustomCharacterTextSplitter("\n########\n") if text_splitter is None else text_splitter
         self.embeddings: OpenAIEmbeddings = OpenAIEmbeddings(model=self.model, chunk_size=1) if embeddings is None else embeddings
         if self.deployment_type == "Chat":
             self.llm: ChatOpenAI = ChatOpenAI(model_name=self.deployment_name, engine=self.deployment_name, temperature=self.temperature, max_tokens=self.max_tokens if self.max_tokens != -1 else None) if llm is None else llm
@@ -103,7 +105,8 @@ class LLMHelper:
             self.vector_store: VectorStore = AzureSearch(azure_cognitive_search_name=self.vector_store_address, azure_cognitive_search_key=self.vector_store_password, index_name=self.index_name, embedding_function=self.embeddings.embed_query) if vector_store is None else vector_store
         else:
             self.vector_store: RedisExtended = RedisExtended(redis_url=self.vector_store_full_address, index_name=self.index_name, embedding_function=self.embeddings.embed_query) if vector_store is None else vector_store   
-        self.k : int = 3 if k is None else k
+        self.k = int(os.getenv('K_RESULTS', 1))
+        #self.k : int = 3 if k is None else k
 
         self.pdf_parser : AzureFormRecognizerClient = AzureFormRecognizerClient() if pdf_parser is None else pdf_parser
         self.blob_client: AzureBlobStorageClient = AzureBlobStorageClient() if blob_client is None else blob_client
@@ -125,15 +128,15 @@ class LLMHelper:
                         document.page_content = document.page_content.encode("iso-8859-1").decode("utf-8", errors="ignore")
                 except:
                     pass
-
+            
             docs = self.text_splitter.split_documents(documents)
-
+            
             # Remove half non-ascii character from start/end of doc content (langchain TokenTextSplitter may split a non-ascii character in half)
-            pattern = re.compile(r'[\x00-\x1f\x7f\u0080-\u00a0\u2000-\u3000\ufff0-\uffff]')
-            for(doc) in docs:
-                doc.page_content = re.sub(pattern, '', doc.page_content)
-                if doc.page_content == '':
-                    docs.remove(doc)
+            #pattern = re.compile(r'[\x00-\x1f\x7f\u0080-\u00a0\u2000-\u3000\ufff0-\uffff]')
+            #for(doc) in docs:
+            #    doc.page_content = re.sub(pattern, '', doc.page_content)
+            #    if doc.page_content == '':
+            #        docs.remove(doc)
 
             keys = []
             for i, doc in enumerate(docs):
@@ -148,25 +151,25 @@ class LLMHelper:
                 self.vector_store.add_documents(documents=docs, keys=keys)
             else:
                 self.vector_store.add_documents(documents=docs, redis_url=self.vector_store_full_address,  index_name=self.index_name, keys=keys)
-            
+                    
         except Exception as e:
             logging.error(f"Error adding embeddings for {source_url}: {e}")
             raise e
-
+    
     def convert_file_and_add_embeddings(self, source_url, filename, enable_translation=False):
         if filename.endswith(".docx"):
 
             text = docx2txt(source_url)
         else:
             # Extract the text from the file
-            text = self.pdf_parser.analyze_read(source_url)
-            # Translate if requested
+            text, _ = self.pdf_parser.analyze_read_to_tree(source_url, self.chunk_size)
+            # Translate if requestedself.k
 
         text = list(map(lambda x: self.translator.translate(x), text)) if self.enable_translation else text
 
         # Upload the text to Azure Blob Storage
         converted_filename = f"converted/{filename}.txt"
-        source_url = self.blob_client.upload_file("\n".join(text), f"converted/{filename}.txt", content_type='text/plain; charset=utf-8')
+        source_url = self.blob_client.upload_file("\n########\n".join(text), f"converted/{filename}.txt", content_type='text/plain; charset=utf-8')
 
         print(f"Converted file uploaded to {source_url} with filename {filename}")
         # Update the metadata to indicate that the file has been converted
@@ -224,11 +227,11 @@ class LLMHelper:
         question_generator = LLMChain(llm=self.llm, prompt=CONDENSE_QUESTION_PROMPT, verbose=False)
         doc_chain = load_qa_with_sources_chain(self.llm, chain_type="stuff", verbose=True, prompt=self.prompt)
         chain = ConversationalRetrievalChain(
-            retriever=self.vector_store.as_retriever(),
+            retriever=self.vector_store.as_retriever(search_kwargs={"k": self.k}),
             question_generator=question_generator,
             combine_docs_chain=doc_chain,
             return_source_documents=True,
-            # top_k_docs_for_context= self.k
+            #top_k_docs_for_context= self.k
         )
 
 

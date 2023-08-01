@@ -43,11 +43,12 @@ def add_urls():
 
 def upload_file(bytes_data: bytes, file_name: str):
     # Upload a new file
+    #print("Trying to upload file")
     st.session_state['filename'] = file_name
     content_type = mimetypes.MimeTypes().guess_type(file_name)[0]
     charset = f"; charset={chardet.detect(bytes_data)['encoding']}" if content_type == 'text/plain' else ''
     st.session_state['file_url'] = llm_helper.blob_client.upload_file(bytes_data, st.session_state['filename'], content_type=content_type+charset)
-
+    #print("##################" + st.session_state['file_url'])
 
 try:
     # Set page layout to wide screen and menu item
@@ -79,8 +80,11 @@ try:
                     llm_helper.add_embeddings_lc(st.session_state['file_url'])
 
                 else:
+                    #print("pdf")
                     # Get OCR with Layout API and then add embeddigns
+                    #print("####################################" + st.session_state['file_url'])
                     converted_filename = llm_helper.convert_file_and_add_embeddings(st.session_state['file_url'], st.session_state['filename'], st.session_state['translate'])
+                    
 
                 llm_helper.blob_client.upsert_blob_metadata(uploaded_file.name, {'converted': 'true', 'embeddings_added': 'true', 'converted_filename': parse.quote(converted_filename)})
                 st.success(f"File {uploaded_file.name} embeddings added to the knowledge base.")

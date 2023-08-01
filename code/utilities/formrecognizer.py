@@ -2,6 +2,9 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 import os
 from dotenv import load_dotenv
+from utilities.sectionrecognizer import process_doc, tree_to_chunks
+
+
 
 class AzureFormRecognizerClient:
     def __init__(self, form_recognizer_endpoint: str = None, form_recognizer_key: str = None):
@@ -10,16 +13,31 @@ class AzureFormRecognizerClient:
 
         self.pages_per_embeddings = int(os.getenv('PAGES_PER_EMBEDDINGS', 2))
         self.section_to_exclude = ['footnote', 'pageHeader', 'pageFooter', 'pageNumber']
-
+        self.section_markers = ['title', 'sectionHeading']
         self.form_recognizer_endpoint : str = form_recognizer_endpoint if form_recognizer_endpoint else os.getenv('FORM_RECOGNIZER_ENDPOINT')
         self.form_recognizer_key : str = form_recognizer_key if form_recognizer_key else os.getenv('FORM_RECOGNIZER_KEY')
+
+    def analyze_read_to_tree(self, formUrl, chunk_size):
+        document_analysis_client = DocumentAnalysisClient(
+            endpoint=self.form_recognizer_endpoint, credential=AzureKeyCredential(self.form_recognizer_key)
+        )
+        
+        poller = document_analysis_client.begin_analyze_document_from_url(
+                "prebuilt-layout", formUrl)
+        layout = poller.result()
+        doc_tree = process_doc(layout.to_dict()['paragraphs'])
+        chunks = tree_to_chunks(doc_tree,  chunk_size)
+        #results = "\n########\n".join(chunks)
+        
+        return chunks, layout
+        
 
     def analyze_read(self, formUrl):
 
         document_analysis_client = DocumentAnalysisClient(
             endpoint=self.form_recognizer_endpoint, credential=AzureKeyCredential(self.form_recognizer_key)
         )
-        
+        print(formUrl)
         poller = document_analysis_client.begin_analyze_document_from_url(
                 "prebuilt-layout", formUrl)
         layout = poller.result()
@@ -33,8 +51,12 @@ class AzureFormRecognizerClient:
             if len(results) < output_file_id + 1:
                 results.append('')
 
+            if p.role in self.section_markers:
+                results[output_file_id] += f"####Section\n"
+
             if p.role not in self.section_to_exclude:
                 results[output_file_id] += f"{p.content}\n"
+
 
         for t in layout.tables:
             page_number = t.bounding_regions[0].page_number
@@ -54,4 +76,4 @@ class AzureFormRecognizerClient:
                     rowcontent += c.content + " | "
                     previous_cell_row += 1
             results[output_file_id] += f"{tablecontent}|"
-        return results
+        return results, layout
