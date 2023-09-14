@@ -110,12 +110,19 @@ def check_variables_in_prompt():
         """)
         st.session_state.custom_prompt = ""
     # Check if "question" is present in the string custom question
+    # Check if "question" is present in the string custom question
     if "{question}" not in st.session_state.custom_prompt:
         st.warning("""Your custom prompt doesn't contain the variable "{question}".
         This variable is used to add the user's question to the prompt.
         Please add it to your custom prompt to use the app.
         Reverting to default prompt.
         """)
+    # Check if "language" is present in the string custom question
+    if "{language}" not in st.session_state.custom_prompt:
+        st.warning("""Your custom prompt doesn't contain the variable "{language}".
+        This variable is used to add the user's language to the prompt
+        Please add it to your custom prompt to use the app.
+        Reverting to default prompt.""")
     # Check if "language" is present in the string custom question
     if "{language}" not in st.session_state.custom_prompt:
         st.warning("""Your custom prompt doesn't contain the variable "{language}".
